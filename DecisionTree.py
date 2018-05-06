@@ -131,7 +131,8 @@ class Node():
 				
 				if shannon_entropy(labels) < 0.00001 :
 					self.is_leaf = True
-					self.membership=[np.count_nonzero(self.data[:,1]==i)/len(data) for i in range(0,max_labels)]
+					self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+					print(self.membership)
 					return
 
 				filtered_data_with_label = [[filtered_data[i],labels[i]] for i in range(len(self.data))]
@@ -231,12 +232,14 @@ class Node():
 
 			else :
 				self.is_leaf = True
-				self.membership=[np.count_nonzero(self.data[:,1]==i)/len(data) for i in range(0,max_labels)]
+				self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+				print(self.membership)
 
 
 		else :
 			self.is_leaf = True
-			self.membership=[np.count_nonzero(self.data[:,1]==i)/len(data) for i in range(0,max_labels)]
+			self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+			print(self.membership)
 
 
 	def evaluate_node(self,test_data_instance,learner_type): 
@@ -291,6 +294,7 @@ class RandomForest():
 		# TODO Membership
 		memberships = [self.trees[i].test_tree(test_dataset,learner_type) for i in range(0,no_of_trees)]
 		combined_memberships=reduce(lambda x,y: list(map(lambda u,v: list(map(add,u,v)) ,x,y)),memberships)
+		print(combined_memberships)
 		predictions = [[combined_memberships[i].index(max(combined_memberships[i])),max(combined_memberships[i])/self.no_of_trees] for i in range(0,len(test_dataset))]
 		predictions = np.array(predictions)
 		return predictions
@@ -303,8 +307,8 @@ def main():
 	#plt.figure(2)
 	
 
-	xcord = np.linspace(-40, 40, 1000)
-	ycord = np.linspace(-40, 40, 1000)
+	xcord = np.linspace(-40, 40, 100)
+	ycord = np.linspace(-40, 40, 100)
 	x, y = np.meshgrid(xcord, ycord)
 
 	test_dataset = []
