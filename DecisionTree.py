@@ -10,7 +10,7 @@ import time
 
 dataset_two_class_1 = []
 
-data = datasets.make_blobs(1200,2,12,center_box=(-40.0,40.0))
+data = datasets.make_blobs(600,2,6,center_box=(-40.0,40.0))
 DATA = [[data[0][i],data[1][i]] for i in range(len(data[0]))]
 
 circle = datasets.make_circles(100)
@@ -77,7 +77,7 @@ class Node():
 				return None
 
 		elif learner_type == 'conic':
-			psi = np.random.randn(phi_length,phi_length)
+			psi = np.random.randn(phi_length+1,phi_length+1)
 			norm = np.sqrt(np.sum([np.linalg.norm(row)**2 for row in psi]))
 			if norm != 0:
 				return np.divide(psi,norm)
@@ -134,6 +134,7 @@ class Node():
 				filtered_data_with_label = [[filtered_data[i],labels[i]] for i in range(len(self.data))]
 
 				if learner_type == 'conic':
+					filtered_data = [np.insert(x,len(temp_phi),1) for x in filtered_data]
 					evaluation = np.array([np.matmul(np.matmul(x,temp_psi),np.transpose(x)) for x in filtered_data])
 				else :
 					evaluation = np.sum(np.multiply(filtered_data,temp_psi),1)
@@ -212,16 +213,16 @@ class Node():
 						box_data.append([0,0,0,self.psi[0],self.psi[1],-self.threshold])
 
 				else :
-					if len(self.psi) == 1:
+					if len(self.psi) == 2:
 						if self.phi[0] == 1:
-							print ("%f*y^2 = %f"%(self.psi,self.threshold))
-							box_data.append([0,0,self.psi,-self.threshold])
+							print ("%f*y^2 + %f*y = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],-self.psi[1][1]+self.threshold))
+							box_data.append([0,0,self.psi[0][0],0,self.psi[0][1]+self.psi[1][0],self.psi[1][1]-self.threshold])
 						else:
-							print ("%f*x^2 = %f"%(self.psi,self.threshold))
-							box_data.append([self.psi,0,0,-self.threshold])
+							print ("%f*x^2 + %f%x = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],-self.psi[1][1]+self.threshold))
+							box_data.append([self.psi[0][0],0,0,self.psi[1][0]+self.psi[0][1],0,self.psi[1][1]-self.threshold])
 					else:
-						print ("%f*x^2 + %f*xy + %f*y^2 = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],self.threshold))
-						box_data.append([self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],-self.threshold])
+						print ("%f*x^2 + %f*xy + %f*y^2 + %f*x + %f*y = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],self.psi[0][2]+self.psi[2][0],self.psi[1][2]+self.psi[2][1],-self.psi[2][2]+self.threshold))
+						box_data.append([self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],self.psi[0][2]+self.psi[2][0],self.psi[1][2]+self.psi[2][1],self.psi[2][2]-self.threshold])
 
 				self.ltree.process_node(dimension,learner_type)
 				self.rtree.process_node(dimension,learner_type)
@@ -260,7 +261,7 @@ class DecisionTree():
 	def test_tree(self,test_dataset):
 		return self.evaluate_node(example) # TODO For entire test dataset
 
-def RandomForest():
+class RandomForest():
 	
 	def __init__(self):
 		self.no_of_trees = no_of_trees
@@ -285,7 +286,7 @@ def RandomForest():
 def main():
 	root = Node()
 	root.data = np.array(DATA)
-	root.process_node(2,'linear')
+	root.process_node(2,'conic')
 	plt.figure(2)
 	
 	x = np.linspace(-40, 40, 1000)
