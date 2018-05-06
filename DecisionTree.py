@@ -8,6 +8,7 @@ import time
 # Linear and Conic
 # Draw Method
 
+dataset_two_class_1 = []
 
 data = datasets.make_blobs(1200,2,12,center_box=(-40.0,40.0))
 DATA = [[data[0][i],data[1][i]] for i in range(len(data[0]))]
@@ -23,6 +24,20 @@ no_of_geometric_primitive = 10
 max_depth = 4
 color = 0
 box_data = []
+
+def read_data(file):
+
+	global dataset_two_class_1
+
+	f = open(file)
+
+	for l in f.readlines():
+		x = l.strip()
+		x = x.split(',')
+		dataset_two_class_1.append([[float(x[1]),float(x[2])],x[0]])
+
+	dataset_two_class_1 = np.array(dataset_two_class_1)
+
 
 def shannon_entropy(labels):
 	unique_labels = np.unique(labels,return_counts = True)
@@ -108,12 +123,7 @@ class Node():
 				#if i % 10 == 0:
 				print (i)
 
-				#if not isinstance(temp_psi,list):
-				#	continue
-
 				filtered_data = np.array(list(map(lambda x : [x[0][i] for i in temp_phi],self.data)))
-
-				#print(temp_psi)
 
 				labels = self.data[:,1]
 				
@@ -123,24 +133,14 @@ class Node():
 
 				filtered_data_with_label = [[filtered_data[i],labels[i]] for i in range(len(self.data))]
 
-				# print (filtered_data)
-
-				#print("TESTS %s"%np.multiply(np.multiply(filtered_data[0],temp_psi),np.transpose(filtered_data[0])))
-
 				if learner_type == 'conic':
 					evaluation = np.array([np.matmul(np.matmul(x,temp_psi),np.transpose(x)) for x in filtered_data])
 				else :
 					evaluation = np.sum(np.multiply(filtered_data,temp_psi),1)
 				evaluation = np.insert(evaluation,len(evaluation),-1000) #TODO
 				evaluation = np.insert(evaluation,len(evaluation),1000)
-				
-				#print(evaluation)
 
 				thresholds = np.sort(np.unique(evaluation))
-
-				#print(len(filtered_data_with_label))
-
-				#print(len(evaluation))
 
 				for ind in range(len(thresholds)-1):
 					th = (thresholds[ind] + thresholds[ind+1])/2.0
@@ -149,8 +149,6 @@ class Node():
 					right_set = [filtered_data_with_label[i][1] for i in range(len(evaluation)-2) if evaluation[i] >= th]
 
 					temp_information_gain = information_gain(left_set,right_set,labels)
-
-					#print ("Info : %s"%temp_information_gain)
 
 					if temp_information_gain > best_gain :
 
@@ -171,11 +169,9 @@ class Node():
 			if len(left_set) != 0 and len(right_set) != 0:				
 	
 				print("Best Gain : %s"%best_gain)
-
 				print("Best Threshold : %s"%best_threshold)
 				print("Best Phi : %s"%best_phi)
 				print("Best Psi : %s"%best_psi)
-
 				print ("Left Child : %s"%len(left_set))
 				print ("Right Child : %s"%len(right_set))
 
@@ -196,33 +192,36 @@ class Node():
 					
 					if len(self.phi) == 1 :
 						if self.phi[0] == 1:
-							box_data.append([range(-80,80,1),[best_threshold]*160])
+							box_data.append([0,0,0,0,self.psi[0],-self.threshold])
 						else:
-							box_data.append([[best_threshold]*160,range(-80,80,1)])
+							box_data.append([0,0,0,self.psi[0],0,-self.threshold])
 					elif self.psi[0] == 1.0 :
-						box_data.append([range(-80,80,1),[best_threshold]*160])
+						box_data.append([0,0,0,0,self.psi[0],-self.threshold])
 					else :
-						box_data.append([range(-80,80,1),[best_threshold]*160])
+						box_data.append([0,0,0,self.psi[0],0,-self.threshold])
 
 				elif learner_type == 'linear':
 					if len(best_psi) == 1 :
 						if self.phi[0] == 1:
-							box_data.append([range(-80,80,1),[best_threshold]*160])
+							box_data.append([0,0,0,0,self.psi[0],-self.threshold])
 						else:
-							box_data.append([[best_threshold]*160,range(-80,80,1)])
+							box_data.append([0,0,0,self.psi[0],0,-self.threshold])
 					elif abs(best_psi[1]) < 0.000001 :
-						box_data.append([range(-80,80,1),[best_threshold]*160])
+						box_data.append([0,0,0,0,self.psi[0],-self.threshold])
 					else :
-						box_data.append([range(-80,80,1),[(best_threshold - best_psi[0]*x)/best_psi[1] for x in range(-80,80,1)]])
+						box_data.append([0,0,0,self.psi[0],self.psi[1],-self.threshold])
 
 				else :
 					if len(self.psi) == 1:
 						if self.phi[0] == 1:
 							print ("%f*y^2 = %f"%(self.psi,self.threshold))
+							box_data.append([0,0,self.psi,-self.threshold])
 						else:
 							print ("%f*x^2 = %f"%(self.psi,self.threshold))
+							box_data.append([self.psi,0,0,-self.threshold])
 					else:
 						print ("%f*x^2 + %f*xy + %f*y^2 = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],self.threshold))
+						box_data.append([self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],-self.threshold])
 
 				self.ltree.process_node(dimension,learner_type)
 				self.rtree.process_node(dimension,learner_type)
@@ -284,22 +283,27 @@ def RandomForest():
 
 
 def main():
-	global DATA,box_data
 	root = Node()
-	root.data = np.array(MOONS)
-	root.process_node(2,'conic')
+	root.data = np.array(DATA)
+	root.process_node(2,'linear')
 	plt.figure(2)
-	for [x,y] in box_data:
-		plt.plot(x,y)
+	
+	x = np.linspace(-40, 40, 1000)
+	y = np.linspace(-40, 40, 1000)
+	x, y = np.meshgrid(x, y)
 
-	X = list(map(lambda x : x[0][0],MOONS))
-	Y = list(map(lambda x : x[0][1],MOONS))
-	L = list(map(lambda x : x[1],MOONS))
+	for [a,h,b,f,g,c] in box_data:
+		plt.contour(x, y,(a*x**2 + h*x*y + b*y**2 + f*x + g*y + c), [0], colors='k')
+
+	X = list(map(lambda x : x[0][0],DATA))
+	Y = list(map(lambda x : x[0][1],DATA))
+	L = list(map(lambda x : x[1],DATA))
 	plt.scatter(X,Y,c=L)
 	plt.show()
 
-
+read_data('data1.csv')
+main()
+'''
 if __name__ == '__main__':
 	main()
-
-
+'''
