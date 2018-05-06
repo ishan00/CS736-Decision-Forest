@@ -2,7 +2,8 @@ from sklearn import *
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-
+from functools import reduce
+from operator import add
 # TODO
 # Membership at each leaf corresponding for each class
 # Linear and Conic
@@ -19,11 +20,12 @@ CIRCLE = [[circle[0][i],circle[1][i]] for i in range(len(circle[0]))]
 moons = datasets.make_moons(100)
 MOONS = [[moons[0][i],moons[1][i]] for i in range(len(moons[0]))]
 
-no_of_trees = 200
+no_of_trees = 2
 no_of_geometric_primitive = 10
 max_depth = 4
 color = 0
 box_data = []
+max_labels = 4
 
 def read_data(file):
 
@@ -129,6 +131,8 @@ class Node():
 				
 				if shannon_entropy(labels) < 0.00001 :
 					self.is_leaf = True
+					self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+					print(self.membership)
 					return
 
 				filtered_data_with_label = [[filtered_data[i],labels[i]] for i in range(len(self.data))]
@@ -229,24 +233,35 @@ class Node():
 
 			else :
 				self.is_leaf = True
+				self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+				print(self.membership)
+
 
 		else :
 			self.is_leaf = True
+			self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+			print(self.membership)
 
-	def evaluate_node(self,example): 
+
+	def evaluate_node(self,test_data_instance,learner_type): 
 
 		#TODO For learner type
 
 		if self.is_leaf :
 			return self.membership
 		else : 
-			relevant_params = [example[x] for x in range(len(example)) if x in best_phi]
-			evaluation = np.multiply(relevant_params,best_psi)
+			#relevant_params = [example[x] for x in range(len(example)) if x in best_phi]
+			#print(test_data_instance)
+			if learner_type == 'conic':
+				evaluation = np.matmul(np.array([test_data_instance[i] for i in self.phi]),np.matmul(self.psi,np.transpose(np.array([test_data_instance[i] for i in self.phi]))))
+			else:
+				evaluation = np.sum(np.multiply(np.array([test_data_instance[i] for i in self.phi]),self.psi))
 
-			if evaluation < best_threshold :
-				return evaluation(self.ltree,example)
+			if evaluation < self.threshold :
+				return self.ltree.evaluate_node(test_data_instance,learner_type)
 			else :
-				return evaluation(self.rtree,example)
+				return self.rtree.evaluate_node(test_data_instance,learner_type)
+
 
 class DecisionTree():
 	
@@ -254,12 +269,12 @@ class DecisionTree():
 		self.root = Node()
 		self.data = np.array([])
 
-	def train_tree(self,train_dataset):
-		self.data = np.array(dataset)
-		self.root.process_node()
+	def train_tree(self,train_dataset,dimension,learner_type):
+		self.root.data = np.array(train_dataset)
+		self.root.process_node(dimension,learner_type)
 
-	def test_tree(self,test_dataset):
-		return self.evaluate_node(example) # TODO For entire test dataset
+	def test_tree(self,test_dataset,learner_type):
+		return [self.root.evaluate_node(x,learner_type) for x in test_dataset ]# TODO For entire test dataset
 
 class RandomForest():
 	
@@ -267,21 +282,48 @@ class RandomForest():
 		self.no_of_trees = no_of_trees
 		self.trees = [DecisionTree() for _ in range(no_of_trees)]
 
-	def train_forest(self,train_dataset):
+	def train_forest(self,train_dataset,dimension,learner_type):
 
 		for i in range(self.no_of_trees):
-			self.trees[i].train_tree()
+			self.trees[i].train_tree(train_dataset,dimension,learner_type)
+			print("\n\n\n\n\nTree %d trained\n\n\n\n\n"%i)
 
-	def test_forest(self,test_dataset):
+	def test_forest(self,test_dataset,learner_type):
 
 		membership = [0 for _ in range(no_of_trees)] 
 
 		# TODO Membership
+		memberships = [self.trees[i].test_tree(test_dataset,learner_type) for i in range(0,no_of_trees)]
+		combined_memberships=reduce(lambda x,y: list(map(lambda u,v: list(map(add,u,v)) ,x,y)),memberships)
+		print(combined_memberships)
+		predictions = [[combined_memberships[i].index(max(combined_memberships[i])),max(combined_memberships[i])/self.no_of_trees] for i in range(0,len(test_dataset))]
+		predictions = np.array(predictions)
+		return predictions
 
-		for i in range(self.no_of_trees):
 
-			prediction_from_tree = self.trees[i].test_tree
+def main():
+	#root = Node()
+	#root.data = np.array(DATA)
+	#root.process_node(2,'linear')
+	#plt.figure(2)
+	
 
+	xcord = np.linspace(-40, 40, 100)
+	ycord = np.linspace(-40, 40, 100)
+	x, y = np.meshgrid(xcord, ycord)
+
+	test_dataset = []
+	for i in xcord:
+		for j in ycord:
+			test_dataset.append([i,j])
+
+	#print(test_dataset)
+	test_dataset = np.array(test_dataset)
+	#for [a,h,b,f,g,c] in box_data:
+	#	plt.contour(x, y,(a*x**2 + h*x*y + b*y**2 + f*x + g*y + c), [0], colors='k')
+
+	forest = RandomForest();
+	forest.train_forest(DATA,2,'axis-aligned')
 
 def main():
 	root = Node()
@@ -289,18 +331,19 @@ def main():
 	root.process_node(2,'conic')
 	plt.figure(2)
 	
-	x = np.linspace(-40, 40, 1000)
-	y = np.linspace(-40, 40, 1000)
-	x, y = np.meshgrid(x, y)
+	#prediction[0] gives labels and predictions[1] gives its probability
+	predictions = forest.test_forest(test_dataset,'axis-aligned')
 
-	for [a,h,b,f,g,c] in box_data:
-		plt.contour(x, y,(a*x**2 + h*x*y + b*y**2 + f*x + g*y + c), [0], colors='k')
-
-	X = list(map(lambda x : x[0][0],DATA))
-	Y = list(map(lambda x : x[0][1],DATA))
-	L = list(map(lambda x : x[1],DATA))
-	plt.scatter(X,Y,c=L)
+	print(predictions)
+	plt.scatter(test_dataset[:,0],test_dataset[:,1],c=predictions[:,0])
 	plt.show()
+
+	#plt.figure(1)
+	#X = list(map(lambda x : x[0][0],DATA))
+	#Y = list(map(lambda x : x[0][1],DATA))
+	#L = list(map(lambda x : x[1],DATA))
+	#plt.scatter(X,Y,c=L)
+	#plt.show()
 
 read_data('data1.csv')
 main()
