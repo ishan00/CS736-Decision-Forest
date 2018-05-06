@@ -5,25 +5,12 @@ import time
 from functools import reduce
 from operator import add
 import csv
-# from plot_random_dataset import *
-# TODO
-# Membership at each leaf corresponding for each class
-# Linear and Conic
-# Draw Method
-'''
-dataset_two_class_1 = []
 
-data = datasets.make_blobs(600,2,6,center_box=(-40.0,40.0))
-DATA = [[data[0][i],data[1][i]] for i in range(len(data[0]))]
-
-circle = datasets.make_circles(100)
-CIRCLE = [[circle[0][i],circle[1][i]] for i in range(len(circle[0]))]
-'''
 moons = datasets.make_moons(100,shuffle=True,noise=0.2)
 MOONS = [[moons[0][i],moons[1][i]] for i in range(len(moons[0]))]
 
-no_of_trees = 5
-no_of_geometric_primitive = 50
+no_of_trees = 10
+no_of_geometric_primitive = 10
 max_depth = 4
 color = 0
 box_data = []
@@ -40,6 +27,7 @@ def load(file):
 		for row in reader:
 			train_dataset.append([[float(row[0]),float(row[1])],int(float(row[2]))])
 			labels[int(float(row[2]))] = 1
+			#print(train_dataset)
 
 	max_labels = len(labels.keys())
 
@@ -69,6 +57,7 @@ class Node():
 		self.phi = np.array([])
 		self.psi = np.array([])
 		self.membership = np.array([]) # TODO
+		self.learning_type = ''
 
 	def generate_psi(self,learner_type,phi_length):
 		if learner_type == 'axis-aligned':
@@ -94,32 +83,37 @@ class Node():
 			psi = np.random.randn(phi_length+1,phi_length+1)
 			norm = np.sqrt(np.sum([np.linalg.norm(row)**2 for row in psi]))
 
-			if phi_length == 1:
-				psi[0][0] = 0
-				return np.divide(psi,norm)
-			elif (abs(psi[0][0]) < 0.001 and abs(psi[0][2] + psi[2][0]) < 0.001):
+			if (abs(psi[0][0]) < 0.001 and abs(psi[0][2] + psi[2][0]) < 0.001):
 				return self.generate_psi(learner_type,phi_length)
-			elif (abs(psi[1][1]) < 0.001 and abs(psi[1][2] + psi[2][1]) < 0.001):
-				return self.generate_psi(learner_type,phi_length)
+			#elif (abs(psi[1][1]) < 0.001 and abs(psi[1][2] + psi[2][1]) < 0.001):
+			#	print("ERROR")
+			#	print(psi)
+			#	return self.generate_psi(learner_type,phi_length)
 			elif norm == 0:
 				return self.generate_psi(learner_type,phi_length)
 			else:
 				psi[0][0] = abs(psi[0][0])
 				psi[1][1] = abs(psi[1][1])
 
-				choice = np.random.randint(0,2)
+				#choice = np.random.randint(0,2)
 				sq = np.sqrt(psi[0][0]*psi[1][1])
-				if choice == 0:
-					psi[1][0] = sq/2.0
-					psi[0][1] = sq/2.0
-				else :
-					psi[1][0] = (np.random.rand()*sq)/2.0
-					psi[0][1] = (np.random.rand()*sq)/2.0
-				return psi
+					#print ("Parabola")
+				psi[1][0] = sq
+				psi[0][1] = sq
+				#else :
+					#print ("Ellipse")
+				#	psi[1][0] = (np.random.rand()*sq)/2.0
+				#	psi[0][1] = (np.random.rand()*sq)/2.0
+				norm = np.sqrt(np.sum([np.linalg.norm(row)**2 for row in psi]))
+				return np.divide(psi,norm)
 
-	def choose_phi(self,dimension):
+	def choose_phi(self,dimension,learner_type):
 		i = np.ceil(np.random.rand()+2)
 		i = min(i,dimension)
+		if learner_type == 'conic':
+			i = 2
+			indices = [0,1]
+			return indices
 		#parameters = np.zeros(dimension)
 		indices = np.unique(np.random.randint(0,dimension,i))
 		#print(indices)
@@ -144,16 +138,11 @@ class Node():
 			if len(self.data) == 0 :
 				return
 
-			#print("Incoming Data Size : %s"%len(self.data))
-			
-			if learner_type == 'conic':
-				no_of_geometric_primitive = 10
+			print("Incoming Data Size : %s"%len(self.data))
 
 			for i in range(no_of_geometric_primitive):
-				temp_phi = self.choose_phi(dimension)
+				temp_phi = self.choose_phi(dimension,learner_type)
 				temp_psi = self.generate_psi(learner_type,len(temp_phi))
-
-				#if i % 10 == 0:
 
 				filtered_data = np.array(list(map(lambda x : [x[0][i] for i in temp_phi],self.data)))
 
@@ -185,13 +174,19 @@ class Node():
 
 					temp_information_gain = information_gain(left_set,right_set,labels)
 
-					if temp_information_gain > best_gain :
+					if temp_information_gain > best_gain or (temp_information_gain == best_gain and len(temp_psi) < len(best_psi)):
 
 						best_gain = temp_information_gain
 						best_phi = temp_phi
 						best_psi = temp_psi
 						best_threshold = th	
 						best_evaluation = evaluation	
+
+			if learner_type == 'conic' and best_gain < 0.1 :
+				self.is_leaf = True
+				self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
+				#print(self.membership)
+				return
 
 			filtered_data = np.array(list(map(lambda x : [x[0][i] for i in best_phi],self.data)))
 			labels = self.data[:,1]
@@ -222,6 +217,7 @@ class Node():
 				self.rtree.depth = self.depth+1
 				self.ltree.data = np.array(left_set)
 				self.rtree.data = np.array(right_set)
+				self.learning_type = learner_type
 
 				if learner_type == 'axis-aligned':
 					
@@ -242,17 +238,17 @@ class Node():
 						else:
 							box_data.append([0,0,0,self.psi[0],0,-self.threshold])
 					elif abs(best_psi[1]) < 0.000001 :
-						box_data.append([0,0,0,0,self.psi[0],-self.threshold])
+						box_data.append([0,0,0,self.psi[0],0,-self.threshold])
 					else :
 						box_data.append([0,0,0,self.psi[0],self.psi[1],-self.threshold])
 
 				else :
 					if len(self.psi) == 2:
 						if self.phi[0] == 1:
-							#print ("%f*y^2 + %f*y = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],-self.psi[1][1]+self.threshold))
+							print ("%f*y^2 + %f*y = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],-self.psi[1][1]+self.threshold))
 							box_data.append([0,0,self.psi[0][0],0,self.psi[0][1]+self.psi[1][0],self.psi[1][1]-self.threshold])
 						else:
-							#print ("%f*x^2 + %f*x = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],-self.psi[1][1]+self.threshold))
+							print ("%f*x^2 + %f*x = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],-self.psi[1][1]+self.threshold))
 							box_data.append([self.psi[0][0],0,0,self.psi[1][0]+self.psi[0][1],0,self.psi[1][1]-self.threshold])
 					else:
 						print ("%f*x^2 + %f*xy + %f*y^2 + %f*x + %f*y = %f"%(self.psi[0][0],self.psi[0][1]+self.psi[1][0],self.psi[1][1],self.psi[0][2]+self.psi[2][0],self.psi[1][2]+self.psi[2][1],-self.psi[2][2]+self.threshold))
@@ -264,13 +260,13 @@ class Node():
 			else :
 				self.is_leaf = True
 				self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
-				#print(self.membership)
+				print(self.membership)
 
 
 		else :
 			self.is_leaf = True
 			self.membership=[np.count_nonzero(self.data[:,1]==i)/len(self.data) for i in range(0,max_labels)]
-			#print(self.membership)
+			print(self.membership)
 
 
 	def evaluate_node(self,test_data_instance,learner_type): 
@@ -330,12 +326,17 @@ class RandomForest():
 		#print(combined_memberships)
 		predictions = [[combined_memberships[i].index(max(combined_memberships[i])),max(combined_memberships[i])/self.no_of_trees] for i in range(0,len(test_dataset))]
 		predictions = np.array(predictions)
+
+		#print(predictions)
+
+		print([np.count_nonzero(predictions[:,0]==i) for i in range(0,max_labels)])
+
 		return predictions
 
 
 def main():
 
-	load('2D-Dataset-9.csv')
+	load('2D-dataset-10.csv')
 
 	print ("Dataset Loaded")
 
@@ -363,14 +364,14 @@ def main():
 	predictions[:,0] = np.add(predictions[:,0],[2])
 	plt.scatter(test_dataset[:,0],test_dataset[:,1],c=predictions[:,0],alpha=0.1)
 
-	print(predictions[:,0])
+	#print(predictions[:,0])
 	
 	X = list(map(lambda x : x[0][0],train_dataset))
 	Y = list(map(lambda x : x[0][1],train_dataset))
 	L = list(map(lambda x : x[1],train_dataset))
 	plt.scatter(X,Y,c=L)
 
-	print(L)
+	#print(L)
 
 	plt.show()
 
